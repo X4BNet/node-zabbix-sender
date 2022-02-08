@@ -80,7 +80,7 @@ ZabbixSender.prototype.send = function(callback) {
         items = this.items.splice(0, this.max_per_send)
     }
 
-    const data = prepareData(items, this.with_timestamps, this.with_ns),
+    const data = prepareData(items, this.with_timestamps, this.with_ns)
 
     // set socket timeout
     client.setTimeout(this.timeout);
