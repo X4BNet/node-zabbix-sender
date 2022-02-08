@@ -10,6 +10,8 @@ var ZabbixSender = module.exports = function(opts) {
     this.with_ns = opts.with_ns || false;
     this.with_timestamps = this.with_ns || opts.with_timestamps || false;
     this.items_host = opts.items_host || hostname;
+    this.max_backlog_time = opts.max_backlog_time || 600;
+    this.max_per_send = opts.max_per_send || 2048;
 
     // prepare items array
     this.clearItems();
@@ -60,16 +62,24 @@ ZabbixSender.prototype.send = function(callback) {
 
     var self     = this,
         error    = false,
-        items    = this.items,
         data     = prepareData(items, this.with_timestamps, this.with_ns),
         client   = new Net.Socket(),
-        response = new Buffer(0);
+        response = new Buffer(0),
+        start = Date.now() / 1000;
 
     // uncoment when debugging
     //console.log(data.slice(13).toString());
 
-    // reset items array
-    this.clearItems();
+    // take the items we are interested in
+    let items = this.items;
+    if(items.length == 0){
+        callback(null, null)
+        return
+    } else if(items.length < this.max_per_send) {
+        this.items = []
+    } else{
+        items = this.items.splice(0, this.max_per_send)
+    }    
 
     // set socket timeout
     client.setTimeout(this.timeout);
@@ -92,18 +102,16 @@ ZabbixSender.prototype.send = function(callback) {
     });
 
     client.on('close', function() {
-        // bail out on any error
-        if (error) {
-            // in case of error, put the items back
-            self.items = self.items.concat(items);
-            return callback(error, {});
-        }
-
-        // bail out if got wrong response
-        if (response.slice(0, 5).toString() !== 'ZBXD\x01') {
+        // bail out on any error or if got wrong response
+        if (error || response.slice(0, 5).toString() !== 'ZBXD\x01') {
             // in case of bad response, put the items back
-            self.items = self.items.concat(items);
-            return callback(new Error("got invalid response from server"), {});
+            const threshold = start - self.max_backlog_time
+            for(const item of items){
+                if(item.clock > threshold){
+                    self.items.push(item)
+                }
+            }
+            return callback(error || new Error("got invalid response from server"), {});
         }
 
         // all clear, return the result
