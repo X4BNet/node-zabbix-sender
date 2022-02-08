@@ -62,7 +62,6 @@ ZabbixSender.prototype.send = function(callback) {
 
     var self     = this,
         error    = false,
-        data     = prepareData(items, this.with_timestamps, this.with_ns),
         client   = new Net.Socket(),
         response = new Buffer(0),
         start = Date.now() / 1000;
@@ -79,7 +78,9 @@ ZabbixSender.prototype.send = function(callback) {
         this.items = []
     } else{
         items = this.items.splice(0, this.max_per_send)
-    }    
+    }
+
+    const data = prepareData(items, this.with_timestamps, this.with_ns),
 
     // set socket timeout
     client.setTimeout(this.timeout);
